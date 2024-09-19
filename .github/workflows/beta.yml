@@ -1,0 +1,51 @@
+name: Beta Actions
+
+on:
+  schedule:
+    - cron: '*/60 * * * *'
+  workflow_dispatch:
+
+jobs:
+  build-beta:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout pokerogue beta code
+      uses: actions/checkout@v4
+      with:
+        repository: pagefaultgames/pokerogue
+        ref: beta
+        show-progress: false
+
+    - name: Setup build outputs
+      id: build
+      run: |
+        hash=$(git rev-parse --short HEAD)
+        echo "hash=$hash" >> $GITHUB_OUTPUT
+        echo "filename=game-beta-$hash.zip" >> $GITHUB_OUTPUT
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version-file: "package.json"
+        check-latest: true
+
+    - name: Build
+      run: npm ci; npm run build -- --mode development; touch dist/${{ steps.build.outputs.hash }}
+
+    - name: Package
+      id: package
+      run: cd dist; zip -q -r ../${{ steps.build.outputs.filename }} .
+
+    - name: Release
+      uses: ncipollo/release-action@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        tag: ${{ steps.build.outputs.hash }}
+        name: "Beta Release ${{ steps.build.outputs.hash }}"
+        artifacts: ${{ steps.build.outputs.filename }}
+        makeLatest: true
+        prerelease: true
+        skipIfReleaseExists: true
